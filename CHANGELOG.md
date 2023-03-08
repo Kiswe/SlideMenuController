@@ -13,4 +13,6 @@ DateTime Format (UTC): `yyyy-mm-ddThh:mm:ssZ`
 - Security in case of vulnerabilities.
 
 ## [Unreleased]
+
+## [0.1.0] - 2023-03-08T17.39.55Z
 - General: Initial Release
