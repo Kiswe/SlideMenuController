@@ -196,21 +196,22 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
 
     private func setupMainContainerView() {
         mainContainerView = UIView(frame: view.bounds)
-        mainContainerView.backgroundColor = .clear
         mainContainerView.autoresizingMask = [.flexibleHeight, .flexibleWidth]
         view.insertSubview(mainContainerView, at: 0)
     }
 
     private func setupOpacityView() {
-        var opacityframe = view.bounds
         let opacityOffset: CGFloat = 0
 
-        opacityframe.origin.y = opacityframe.origin.y + opacityOffset
-        opacityframe.size.height = opacityframe.size.height - opacityOffset
-        opacityView = UIView(frame: opacityframe)
+        var opacityFrame = view.bounds
+        opacityFrame.origin.y = opacityFrame.origin.y + opacityOffset
+        opacityFrame.size.height = opacityFrame.size.height - opacityOffset
+
+        opacityView = UIView(frame: opacityFrame)
         opacityView.backgroundColor = config.opacityViewBackgroundColor
         opacityView.autoresizingMask = [.flexibleHeight, .flexibleWidth]
-        opacityView.layer.opacity = 0.0
+        opacityView.alpha = 0 // Starts at 0 since the panels are closed
+        opacityView.isHidden = true
         view.insertSubview(opacityView, at: 1)
     }
 
@@ -299,7 +300,6 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
             containerView = rightContainerView
         }
 
-        containerView.backgroundColor = .clear
         containerView.autoresizingMask = .flexibleHeight
 
         let subViewPos = subviewPosition(for: containerViewId)
@@ -317,15 +317,16 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
         coordinator.animate(alongsideTransition: nil) { _ in
             self.closeNonAnimation(for: .left)
             self.closeNonAnimation(for: .right)
+
             self.leftContainerView.isHidden = false
             self.rightContainerView.isHidden = false
 
-            if self.leftPanGesture != nil, self.leftPanGesture != nil {
+            if self.leftPanGesture != nil {
                 self.removeGestures(for: .left)
                 self.addGestures(for: .left)
             }
 
-            if self.rightPanGesture != nil, self.rightPanGesture != nil {
+            if self.rightPanGesture != nil {
                 self.removeGestures(for: .right)
                 self.addGestures(for: .right)
             }
@@ -347,6 +348,7 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
 
     override open func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
+
         if let mainViewController {
             setUpViewController(mainContainerView, targetViewController: mainViewController)
         }
@@ -503,8 +505,7 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
         }
     }
 
-    open func track(_ trackAction: TrackAction, containerViewId: SideContainerViewId) {
-    }
+    open func track(_ trackAction: TrackAction, containerViewId: SideContainerViewId) {}
 
     @objc func handleLeftPanGesture(_ panGesture: UIPanGestureRecognizer) {
         handlePanGesture(panGesture, for: .left)
@@ -644,6 +645,8 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
 
         addShadowToView(containerView)
 
+        opacityView.isHidden = false
+
         UIView.animate(
             withDuration: duration, delay: 0, options: config.animationOptions,
             animations: { [weak self] in
@@ -660,7 +663,7 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
                     self.rightContainerView.frame = frame
                 }
 
-                self.opacityView.layer.opacity = Float(self.config.contentViewOpacity)
+                self.opacityView.alpha = 1 - self.config.contentViewOpacity
 
                 if self.config.contentViewDrag {
                     self.mainContainerView.transform = .init(translationX: transformTranslationX, y: 0)
@@ -671,10 +674,11 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
                 }
             }, completion: { [weak self] _ in
                 guard let self else { return }
-                self.mainContainerView.isUserInteractionEnabled = false
 
                 let containerView = self.containerView(for: containerViewId)
                 let containerViewController = self.viewController(for: containerViewId)
+
+                self.mainContainerView.isUserInteractionEnabled = false
 
                 containerViewController?.endAppearanceTransition()
 
@@ -726,15 +730,17 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
                     self.rightContainerView.frame = frame
                 }
 
-                self.opacityView.layer.opacity = 0.0
+                self.opacityView.alpha = 0
                 self.mainContainerView.transform = .identity
             }, completion: { [weak self] _ in
                 guard let self else { return }
-                self.removeShadow(self.leftContainerView)
-                self.mainContainerView.isUserInteractionEnabled = true
 
                 let containerView = self.containerView(for: containerViewId)
                 let containerViewController = self.viewController(for: containerViewId)
+
+                self.removeShadow(containerView)
+                self.mainContainerView.isUserInteractionEnabled = true
+                self.opacityView.isHidden = true
 
                 containerViewController?.endAppearanceTransition()
 
@@ -908,8 +914,8 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
             openedRatio = openedRightRatio
         }
 
-        let opacity = config.contentViewOpacity * openedRatio
-        opacityView.layer.opacity = Float(opacity)
+        let alpha = (1 - config.contentViewOpacity) * openedRatio
+        opacityView.alpha = alpha
     }
 
     fileprivate func applyContentViewScale(_ containerViewId: SideContainerViewId) {
@@ -935,7 +941,7 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     fileprivate func addShadowToView(_ targetView: UIView) {
-        targetView.layer.masksToBounds = false
+        targetView.clipsToBounds = false
         targetView.layer.shadowOffset = config.shadowOffset
         targetView.layer.shadowOpacity = Float(config.shadowOpacity)
         targetView.layer.shadowRadius = config.shadowRadius
@@ -943,43 +949,38 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     fileprivate func removeShadow(_ targetView: UIView) {
-        targetView.layer.masksToBounds = true
-        mainContainerView.layer.opacity = 1.0
-    }
-
-    fileprivate func removeContentOpacity() {
-        opacityView.layer.opacity = 0.0
-    }
-
-    fileprivate func addContentOpacity() {
-        opacityView.layer.opacity = Float(config.contentViewOpacity)
+        targetView.clipsToBounds = true
+        mainContainerView.alpha = 1
     }
 
     fileprivate func setOpenWindowLevel() {
         guard config.hideStatusBar else { return }
         DispatchQueue.main.async {
-            self.keyWindow?.windowLevel = UIWindow.Level.statusBar + 1
+            self.keyWindow?.windowLevel = .statusBar + 1
         }
     }
 
     fileprivate func setCloseWindowLevel() {
         guard config.hideStatusBar else { return }
         DispatchQueue.main.async {
-            self.keyWindow?.windowLevel = UIWindow.Level.normal
+            self.keyWindow?.windowLevel = .normal
         }
     }
 
     fileprivate func setUpViewController(_ targetView: UIView, targetViewController: UIViewController) {
-        targetViewController.view.frame = targetView.bounds
-
         guard !children.contains(targetViewController) else { return }
 
         addChild(targetViewController)
+        targetViewController.view.frame = targetView.bounds
         targetView.addSubview(targetViewController.view)
         targetViewController.didMove(toParent: self)
     }
 
     fileprivate func removeViewController(_ viewController: UIViewController) {
+        // Just to be safe, we check that this view controller
+        // is actually added to a parent before removing it.
+        guard viewController.parent == self else { return }
+
         viewController.view.layer.removeAllAnimations()
         viewController.willMove(toParent: nil)
         viewController.view.removeFromSuperview()
@@ -1004,7 +1005,9 @@ open class SlideMenuController: UIViewController, UIGestureRecognizerDelegate {
         frame.origin.x = finalXOrigin
         containerView.frame = frame
 
-        opacityView.layer.opacity = 0.0
+        opacityView.alpha = 0
+        opacityView.isHidden = true
+
         mainContainerView.transform = .identity
         removeShadow(containerView)
         mainContainerView.isUserInteractionEnabled = true
